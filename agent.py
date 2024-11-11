@@ -1,117 +1,138 @@
 import requests
 from uagents import Agent, Context, Protocol, Model, Field
 from ai_engine import UAgentResponse, UAgentResponseType
-import base64
+
 
 agent = Agent()
 
+
 GITHUB_API_URL = "https://api.github.com"
+
 GITHUB_TOKEN_DETAILS = ""
 GITHUB_TOKEN_ISSUE = ""
+
+
 github_protocol = Protocol(name="GitHubRepoProtocol")
+
+
 class GitHubRepoRequest(Model):
     repo_url: str = Field(description="The URL of the GitHub repository.")
-    action: str = Field(description="Action to perform: 'get_details', 'create_issue', 'compare', 'list_issues', 'get_readme'.")
+    action: str = Field(description="Action to perform, e.g., 'get_details', 'create_issue', 'list_issues', 'get_readme', 'add_collaborator', 'remove_collaborator', 'get_commits', 'get_branches', 'list_contributors', 'star_repo', 'unstar_repo', 'get_user_info'.")
     issue_title: str = Field(default=None, description="Title of the issue if action is 'create_issue'.")
     issue_body: str = Field(default=None, description="Body of the issue if action is 'create_issue'.")
+    collaborator_username: str = Field(default=None, description="Username of the collaborator to add or remove.")
     compare_repo_url: str = Field(default=None, description="The URL of the second repository for comparison.")
-def get_repo_details(repo_url: str) -> dict:
+    user_info: str = Field(default=None, description="GitHub username to fetch user details, like repositories, most used languages, followers, etc.")
+
+
+def get_repo_details(repo_url: str) -> str:
     repo_name = repo_url.split("github.com/")[-1]
     headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
     response = requests.get(f"{GITHUB_API_URL}/repos/{repo_name}", headers=headers)
+    return str(response.json()) if response.status_code == 200 else f"Error: {response.json().get('message')}"
 
-    if response.status_code == 200:
-        return response.json()
-    return {"error": f"Failed to fetch repository details: {response.json().get('message')}"}
-def create_issue(repo_url: str, title: str, body: str) -> dict:
+
+def create_issue(repo_url: str, title: str, body: str) -> str:
     repo_name = repo_url.split("github.com/")[-1]
     headers = {"Authorization": f"token {GITHUB_TOKEN_ISSUE}"}
     data = {"title": title, "body": body}
     response = requests.post(f"{GITHUB_API_URL}/repos/{repo_name}/issues", headers=headers, json=data)
+    return "Issue created successfully." if response.status_code == 201 else f"Error: {response.json().get('message')}"
 
-    if response.status_code == 201:
-        return {"message": "Issue created successfully."}
-    return {"error": f"Failed to create issue: {response.json().get('message')}"}
-def compare_repos(repo_url1: str, repo_url2: str) -> str:
-    repo1_details = get_repo_details(repo_url1)
-    repo2_details = get_repo_details(repo_url2)
-    
-    if "error" in repo1_details:
-        return repo1_details["error"]
-    if "error" in repo2_details:
-        return repo2_details["error"]
 
-    comparison = (
-        f"Comparison of Repositories:\n\n"
-        f"Repo 1 - {repo1_details['name']}:\n"
-        f"- Description: {repo1_details['description']}\n"
-        f"- Stars: {repo1_details['stargazers_count']}\n"
-        f"- Forks: {repo1_details['forks_count']}\n"
-        f"- Open Issues: {repo1_details['open_issues_count']}\n\n"
-        f"Repo 2 - {repo2_details['name']}:\n"
-        f"- Description: {repo2_details['description']}\n"
-        f"- Stars: {repo2_details['stargazers_count']}\n"
-        f"- Forks: {repo2_details['forks_count']}\n"
-        f"- Open Issues: {repo2_details['open_issues_count']}\n"
-    )
-
-    return comparison
-def list_issues(repo_url: str) -> str:
+def add_collaborator(repo_url: str, username: str) -> str:
     repo_name = repo_url.split("github.com/")[-1]
     headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
-    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_name}/issues", headers=headers)
+    response = requests.put(f"{GITHUB_API_URL}/repos/{repo_name}/collaborators/{username}", headers=headers)
+    return "Collaborator added successfully." if response.status_code == 201 else f"Error: {response.json().get('message')}"
 
-    if response.status_code == 200:
-        issues = response.json()
-        if not issues:
-            return "No issues found in the repository."
-        issue_list = "\n".join([f"- #{issue['number']}: {issue['title']}" for issue in issues])
-        return f"Issues in {repo_name}:\n{issue_list}"
-    return f"Failed to list issues: {response.json().get('message')}"
-def get_readme(repo_url: str) -> str:
+def remove_collaborator(repo_url: str, username: str) -> str:
     repo_name = repo_url.split("github.com/")[-1]
     headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
-    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_name}/readme", headers=headers)
+    response = requests.delete(f"{GITHUB_API_URL}/repos/{repo_name}/collaborators/{username}", headers=headers)
+    return "Collaborator removed successfully." if response.status_code == 204 else f"Error: {response.json().get('message')}"
 
+
+def list_commits(repo_url: str) -> str:
+    repo_name = repo_url.split("github.com/")[-1]
+    headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
+    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_name}/commits", headers=headers)
     if response.status_code == 200:
-        readme_data = response.json()
-        readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
-        return f"README Content:\n\n{readme_content}"
-    return f"Failed to fetch README: {response.json().get('message')}"
+        commits = response.json()
+        return "<br>".join([f"Commit: {commit['sha']} - {commit['commit']['message']}" for commit in commits])
+    return f"Error: {response.json().get('message')}"
+
+def get_branches(repo_url: str) -> str:
+    repo_name = repo_url.split("github.com/")[-1]
+    headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
+    response = requests.get(f"{GITHUB_API_URL}/repos/{repo_name}/branches", headers=headers)
+    if response.status_code == 200:
+        branches = response.json()
+        return "<br>".join([branch['name'] for branch in branches])
+    return f"Error: {response.json().get('message')}"
+
+
+def get_user_info(username: str) -> str:
+    if "github.com/" in username:
+        username = username.split("github.com/")[-1] 
+
+    headers = {"Authorization": f"token {GITHUB_TOKEN_DETAILS}"}
+    response = requests.get(f"{GITHUB_API_URL}/users/{username}", headers=headers)
+    if response.status_code == 200:
+        user_info = response.json()
+        repos_response = requests.get(f"{GITHUB_API_URL}/users/{username}/repos", headers=headers)
+        user_info["repositories"] = repos_response.json() if repos_response.status_code == 200 else []
+        
+        response_message = f"""
+        <h3>GitHub User Info: {user_info['login']}</h3>
+        <ul>
+            <li><strong>Name:</strong> {user_info.get('name', 'N/A')}</li>
+            <li><strong>Company:</strong> {user_info.get('company', 'N/A')}</li>
+            <li><strong>Location:</strong> {user_info.get('location', 'N/A')}</li>
+            <li><strong>Bio:</strong> {user_info.get('bio', 'N/A')}</li>
+            <li><strong>Followers:</strong> {user_info.get('followers', 'N/A')}</li>
+            <li><strong>Following:</strong> {user_info.get('following', 'N/A')}</li>
+            <li><strong>Public Repos:</strong> {user_info.get('public_repos', 'N/A')}</li>
+            <li><strong>Twitter:</strong> @{user_info.get('twitter_username', 'N/A')}</li>
+            <li><strong>GitHub Profile:</strong> <a href="{user_info['html_url']}">Visit Profile</a></li>
+        </ul>
+        <h4>Repositories:</h4>
+        <ul>
+        """
+        for repo in user_info["repositories"]:
+            response_message += f'<li><a href="{repo["html_url"]}">{repo["name"]}</a></li>'
+        
+        response_message += "</ul>"
+        
+        return response_message
+    return f"Error: {response.json().get('message')}"
+
+
 @github_protocol.on_message(model=GitHubRepoRequest, replies={UAgentResponse})
 async def handle_github_repo_request(ctx: Context, sender: str, msg: GitHubRepoRequest):
     ctx.logger.info(f"Received GitHub repo request for URL: '{msg.repo_url}', Action: '{msg.action}'")
 
-    if msg.action == "get_details":
-        repo_info = get_repo_details(msg.repo_url)
-        if "error" in repo_info:
-            message = repo_info["error"]
-        else:
-            message = (
-                f"Repository Details:\n"
-                f"- Name: {repo_info['name']}\n"
-                f"- Description: {repo_info['description']}\n"
-                f"- Stars: {repo_info['stargazers_count']}\n"
-                f"- Forks: {repo_info['forks_count']}\n"
-                f"- Open Issues: {repo_info['open_issues_count']}\n"
-            )
-    elif msg.action == "create_issue" and msg.issue_title and msg.issue_body:
-        result = create_issue(msg.repo_url, msg.issue_title, msg.issue_body)
-        message = result.get("message", result.get("error"))
 
-    elif msg.action == "compare" and msg.compare_repo_url:
-        message = compare_repos(msg.repo_url, msg.compare_repo_url)
+    actions = {
+        "get_details": lambda: get_repo_details(msg.repo_url),
+        "create_issue": lambda: create_issue(msg.repo_url, msg.issue_title, msg.issue_body),
+        "add_collaborator": lambda: add_collaborator(msg.repo_url, msg.collaborator_username),
+        "remove_collaborator": lambda: remove_collaborator(msg.repo_url, msg.collaborator_username),
+        "get_commits": lambda: list_commits(msg.repo_url),
+        "get_branches": lambda: get_branches(msg.repo_url),
+        "get_user_info": lambda: get_user_info(msg.user_info),  
+    }
 
-    elif msg.action == "list_issues":
-        message = list_issues(msg.repo_url)
+    response = actions.get(msg.action, lambda: "Invalid action or missing required fields.")()
+    
 
-    elif msg.action == "get_readme":
-        message = get_readme(msg.repo_url)
+    response = str(response)
 
-    else:
-        message = "Invalid action or missing required fields."
-    ctx.logger.info(f"Sending message to {sender}: {message}")
-    await ctx.send(sender, UAgentResponse(message=message, type=UAgentResponseType.FINAL))
+
+    ctx.logger.info(f"Sending message to {sender}: {response}")
+    await ctx.send(sender, UAgentResponse(message=response, type=UAgentResponseType.FINAL))
+
+
 agent.include(github_protocol, publish_manifest=True)
 
 if __name__ == "__main__":
