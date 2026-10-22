@@ -1,188 +1,135 @@
+# git-agent
 
-# GitHub Repository Management Agent
+A [Fetch.ai uAgents](https://fetch.ai) agent that manages GitHub repositories
+through natural-language requests. It answers with accessible, semantic HTML
+that renders safely in chat clients that support HTML (such as ASI:One or the
+Agentverse), and degrades to plain text elsewhere.
 
-This GitHub Repository Management Agent enables users to efficiently manage GitHub repositories through automated interactions. Using the Fetch.ai `uAgents` framework, this agent provides asynchronous features for retrieving repository details, managing collaborators, creating and listing issues, comparing repositories, fetching README content, and more. It’s designed for developers, project managers, and educators looking to simplify and automate repository tasks.
+## Features
 
-## 📌 Features
+- **13 repository actions** — details, issues, README, commits, branches,
+  contributors, repository comparison, collaborators (add/remove), starring,
+  and user profiles.
+- **Robust error handling** — every failure path returns a clear, actionable
+  message instead of crashing the agent: timeouts, network failures, rate
+  limits, invalid tokens, missing resources, and malformed payloads are all
+  mapped to human-readable text with the appropriate `ERROR` response type.
+- **Accessible output** — semantic HTML (`h3`, `ul`/`li`, tables with
+  `scope` attributes, descriptive links) and `html.escape`d user data, so
+  injected markup is displayed as text, never executed.
+- **Optional authentication** — write actions require a GitHub personal
+  access token supplied through environment variables; read actions work
+  without one.
 
-The GitHub Repository Management Agent includes the following core functionalities:
+## Supported actions
 
-1. **Get Repository Details**  
-   Retrieve essential information about any GitHub repository, including its name, description, stars, forks, and open issues count.
+| Action | Description | Requires token |
+| --- | --- | --- |
+| `get_details` | Repository metadata (stars, forks, issues, language, license, topics) | No |
+| `create_issue` | Open a new issue (`issue_title` required) | Yes (`GITHUB_TOKEN_ISSUE`) |
+| `list_issues` | Open issues (pull requests are filtered out) | No |
+| `get_readme` | Repository README, truncated to 6000 characters | No |
+| `compare` | Compare stars/forks/issues/watchers of two repositories | No |
+| `add_collaborator` | Grant repository access to a user | Yes (`GITHUB_TOKEN_DETAILS`) |
+| `remove_collaborator` | Revoke repository access | Yes (`GITHUB_TOKEN_DETAILS`) |
+| `get_commits` | Recent commits (short SHA + first line of the message) | No |
+| `get_branches` | List branches | No |
+| `list_contributors` | Top contributors | No |
+| `star_repo` | Star the repository | Yes (`GITHUB_TOKEN_DETAILS`) |
+| `unstar_repo` | Unstar the repository | Yes (`GITHUB_TOKEN_DETAILS`) |
+| `get_user_info` | Public profile of a GitHub user plus their repositories | No |
 
-2. **Create Issues**  
-   Quickly create new issues in a specified repository by providing a title and body for the issue.
+Unsupported or misspelled actions receive an explicit error message listing
+every supported action.
 
-3. **Compare Repositories**  
-   Compare two repositories based on metrics like stars, forks, and open issues, helping users evaluate and benchmark open-source projects.
+## Requirements
 
-4. **List Issues**  
-   View all open issues in a repository, displaying titles and issue numbers for easy tracking.
+- Python 3.9+
+- A GitHub personal access token (only for write actions) with the
+  `repo` scope
 
-5. **Fetch README Content**  
-   Retrieve and display the content of a repository's README file, offering insight into project details and setup instructions.
-
-6. **Add Collaborator**  
-   Add a collaborator to a repository by providing their GitHub username, allowing them access to contribute.
-
-7. **Remove Collaborator**  
-   Remove a collaborator from a repository using their GitHub username to revoke their access.
-
-8. **List Commits**  
-   Retrieve recent commits in the specified repository, providing a snapshot of recent changes and contributors.
-
-9. **Get Branches**  
-   Retrieve a list of all branches in the repository, helpful for tracking parallel development work.
-
-10. **Get User Info**  
-    Fetch detailed information about a GitHub user, including their public repositories, followers, and other profile data.
-
-## 🛠️ Setup Instructions
-
-Follow these steps to set up and run the GitHub Repository Management Agent.
-
-### Prerequisites
-
-- **Python 3.8+**: Ensure Python is installed on your system.
-
-### Installation
-
-1. **Clone the Repository**
-
-   ```bash
-   git clone https://github.com/your_username/github-agent
-   cd github-agent
-   ```
-
-2. **Install Dependencies**
-   Install the necessary packages using pip:
-
-   ```bash
-   pip install requests uagents
-   ```
-
-3. **Configure GitHub API Tokens**
-   Replace placeholders in the code (`GITHUB_TOKEN_DETAILS` and `GITHUB_TOKEN_ISSUE`) with your actual GitHub API tokens to authenticate requests to GitHub.
-
-### Running the Agent
-
-Start the agent by running the main script:
+## Installation
 
 ```bash
-python your_script_name.py
+git clone https://github.com/gautammanak1/git-agent.git
+cd git-agent
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
 ```
 
-## 🧑‍💼 Business Model
+## Configuration
 
-This agent can be monetized as a service to assist developers and project teams in managing GitHub repositories. Potential clients and use cases include:
+The agent reads two optional environment variables:
 
-- **Development Teams**: Automate repository management tasks, such as issue tracking and documentation updates.
-- **Project Managers**: Use the agent to compare project metrics, like stars and forks, when evaluating or benchmarking open-source projects.
-- **Education & Training**: Teach GitHub workflows and project management to new developers through automated, hands-on assistance.
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `GITHUB_TOKEN_DETAILS` | `add_collaborator`, `remove_collaborator`, `star_repo`, `unstar_repo` | Token for collaborator and starring actions |
+| `GITHUB_TOKEN_ISSUE` | `create_issue` | Token for creating issues |
 
-## 📖 Usage
+Without a token, the corresponding actions return a clear error explaining
+which variable to set. Read-only actions never require a token.
 
-Each feature is accessible via specific actions sent in the `GitHubRepoRequest` model. Below are examples of usage for each feature, detailing the inputs and expected responses.
+```bash
+# Windows (cmd)
+set GITHUB_TOKEN_ISSUE=ghp_your_token_here
 
-### Example Commands
+# macOS / Linux
+export GITHUB_TOKEN_ISSUE=ghp_your_token_here
+```
 
-1. **Get Repository Details**
+## Running the agent
 
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="get_details")
-   ```
+```bash
+python main.py
+```
 
-   Retrieves the name, description, stars, forks, and open issues count of the specified repository.
+## Error handling
 
-2. **Create Issue**
+All GitHub traffic goes through a single request helper that maps every
+failure to an actionable message:
 
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="create_issue", issue_title="Bug Report", issue_body="Detailed description of the issue...")
-   ```
+- **Timeouts** — the agent waits at most 20 seconds per request and reports
+  the limit when exceeded.
+- **Network failures** — DNS or connection problems return "Could not reach
+  the GitHub API" instead of a traceback.
+- **Rate limiting** — 403/429 responses with an exhausted quota are
+  reported explicitly.
+- **Authentication** — invalid tokens produce a dedicated 401 message.
+- **Missing resources** — 404 responses name the resource that was not
+  found (for example, `Not found (404): repository 'a/b'`).
+- **Malformed payloads** — non-JSON responses are handled gracefully.
+- **Unexpected exceptions** — the protocol handler never raises; it logs
+  and returns an `ERROR`-typed response.
 
-   Creates a new issue in the specified repository, with a custom title and description.
+Input validation rejects malformed repository URLs and usernames up front
+with instructions on the accepted format (`owner/repo` or a full GitHub URL).
 
-3. **Compare Repositories**
+## Accessibility
 
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo1", action="compare", compare_repo_url="https://github.com/user/repo2")
-   ```
+- Semantic HTML: headings, unordered lists, and tables with
+  `scope="col"` / `scope="row"` headers.
+- All user-controlled data is escaped with `html.escape`, preventing HTML
+  injection from repository names, topics, README contents, and issue titles.
+- Links are descriptive (the repository name), never bare URLs.
+- Error messages are complete sentences that state what failed and how to
+  fix it.
 
-   Compares metrics like stars, forks, and open issues between two repositories.
+## Testing
 
-4. **List Issues**
+The test suite (51 tests) covers input validation, the HTTP error mapping,
+every action, and the protocol handler. All HTTP traffic is mocked — no real
+API calls are performed.
 
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="list_issues")
-   ```
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -v
+```
 
-   Lists all open issues in the specified repository, displaying each issue’s title and number.
+## License
 
-5. **Fetch README Content**
-
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="get_readme")
-   ```
-
-   Fetches and displays the README content of the specified repository.
-
-6. **Add Collaborator**
-
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="add_collaborator", collaborator_username="username")
-   ```
-
-   Adds a collaborator to the specified repository by GitHub username.
-
-7. **Remove Collaborator**
-
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="remove_collaborator", collaborator_username="username")
-   ```
-
-   Removes a collaborator from the specified repository using their GitHub username.
-
-8. **List Commits**
-
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="get_commits")
-   ```
-
-   Lists recent commits in the specified repository, showing commit messages and timestamps.
-
-9. **Get Branches**
-
-   ```python
-   request = GitHubRepoRequest(repo_url="https://github.com/user/repo", action="get_branches")
-   ```
-
-   Retrieves a list of all branches in the specified repository.
-
-10. **Get User Info**
-
-    ```python
-    request = GitHubRepoRequest(action="get_user_info", user_info="username")
-    ```
-
-    Fetches detailed information about a specified GitHub user, including their public repositories, followers, and other profile details.
-
-## Agent Protocols
-
-The agent processes different requests by following specific protocols for each action. Each request is handled using the `GitHubRepoRequest` model and sends a response back using `UAgentResponse`, ensuring smooth interaction with the GitHub API.
-
-## 🤝 Contributing
-
-Contributions are welcome! If you want to contribute:
-
-1. **Fork the repository**
-2. **Create a new branch** with a descriptive name
-3. **Make your changes**
-4. **Submit a pull request** with a summary of your changes
-
-Please raise any issues for bugs or suggested enhancements.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
+MIT — see the repository for details.
